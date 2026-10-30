@@ -3403,4 +3403,165 @@ setTimeout(()=>{
 })();
 </script>
 
+
+<script>
+/* ===== v11: قفل ورود با رمز عبور ===== */
+(function(){
+'use strict';
+const GATE_KEY='txn_gate_v1';
+const GATE_HASH_KEY='txn_gate_hash_v1';
+/* رمز پیش‌فرض: Arani1405 — بعد از ورود از تنظیمات عوض کنید */
+const DEFAULT_HASH='17e1faaacc4907de64eabbd68f8affa0ecccb2daff5a983a3cbfbf1d516a4988';
+
+async function sha256(text){
+  const data=new TextEncoder().encode(String(text));
+  const buf=await crypto.subtle.digest('SHA-256',data);
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+function getStoredHash(){
+  try{return localStorage.getItem(GATE_HASH_KEY)||DEFAULT_HASH}catch(e){return DEFAULT_HASH}
+}
+function isUnlocked(){
+  try{
+    const s=sessionStorage.getItem(GATE_KEY);
+    if(s==='1')return true;
+    const l=localStorage.getItem(GATE_KEY);
+    if(l==='1')return true;
+  }catch(e){}
+  return false;
+}
+function setUnlocked(remember){
+  try{sessionStorage.setItem(GATE_KEY,'1')}catch(e){}
+  try{if(remember)localStorage.setItem(GATE_KEY,'1');else localStorage.removeItem(GATE_KEY)}catch(e){}
+}
+function lockNow(){
+  try{sessionStorage.removeItem(GATE_KEY);localStorage.removeItem(GATE_KEY)}catch(e){}
+  location.reload();
+}
+
+function showGate(){
+  if(document.getElementById('gate11'))return;
+  const st=document.createElement('style');
+  st.id='gate11css';
+  st.textContent=`
+  #gate11{position:fixed;inset:0;z-index:99999;background:linear-gradient(160deg,#0f1419 0%,#1a2332 50%,#12161c 100%);
+    display:flex;align-items:center;justify-content:center;padding:20px;font-family:Vazirmatn,Tahoma,sans-serif;direction:rtl}
+  #gate11 .box{width:min(380px,100%);background:rgba(30,40,55,.95);border:1px solid rgba(255,255,255,.1);
+    border-radius:16px;padding:28px 24px;box-shadow:0 20px 50px rgba(0,0,0,.45);color:#e8eef6}
+  #gate11 h1{margin:0 0 6px;font-size:20px;font-weight:700;text-align:center}
+  #gate11 .sub{text-align:center;color:#9aa8b8;font-size:12px;margin-bottom:20px;line-height:1.7}
+  #gate11 label{display:block;font-size:12px;color:#9aa8b8;margin-bottom:6px}
+  #gate11 input[type=password],#gate11 input[type=text]{width:100%;box-sizing:border-box;padding:12px 14px;border-radius:10px;
+    border:1px solid rgba(255,255,255,.15);background:#0f1419;color:#e8eef6;font-size:16px;outline:none}
+  #gate11 input:focus{border-color:#1f6feb}
+  #gate11 .row{margin-bottom:14px}
+  #gate11 .rem{display:flex;align-items:center;gap:8px;font-size:13px;color:#9aa8b8;margin-bottom:16px}
+  #gate11 button.go{width:100%;padding:12px;border:0;border-radius:10px;background:#1f6feb;color:#fff;
+    font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}
+  #gate11 button.go:active{opacity:.9}
+  #gate11 .err{color:#f85149;font-size:13px;text-align:center;min-height:20px;margin-top:10px}
+  #gate11 .hint{margin-top:14px;font-size:11px;color:#6e7681;text-align:center;line-height:1.6}
+  body.gate-lock>#hd,body.gate-lock>#tabs,body.gate-lock>#app,body.gate-lock>#bar,body.gate-lock>#pv{visibility:hidden!important;pointer-events:none!important}
+  `;
+  document.head.appendChild(st);
+  document.body.classList.add('gate-lock');
+
+  const d=document.createElement('div');
+  d.id='gate11';
+  d.innerHTML=`<div class="box">
+    <h1>🔒 ورود به برنامه</h1>
+    <div class="sub">برای ادامه رمز عبور را وارد کنید</div>
+    <div class="row"><label>رمز عبور</label>
+      <input type="password" id="gate_pw" autocomplete="current-password" enterkeyhint="go">
+    </div>
+    <label class="rem"><input type="checkbox" id="gate_rem" checked> روی این دستگاه به خاطر بسپار</label>
+    <button type="button" class="go" id="gate_go">ورود</button>
+    <div class="err" id="gate_err"></div>
+    <div class="hint">رمز پیش‌فرض اولیه: <b dir="ltr">Arani1405</b><br>بعد از ورود می‌توانید آن را عوض کنید.<br>
+    این قفل جلوی ورود اتفاقی را می‌گیرد؛ برای امنیت بانکی از همگام‌سازی با کد محرمانه استفاده کنید.</div>
+  </div>`;
+  document.body.appendChild(d);
+
+  const pw=$('#gate_pw'), err=$('#gate_err');
+  const tryLogin=async()=>{
+    err.textContent='';
+    const val=pw.value;
+    if(!val){err.textContent='رمز را وارد کنید';return}
+    try{
+      const h=await sha256(val);
+      if(h!==getStoredHash()){err.textContent='رمز اشتباه است';pw.select();return}
+      setUnlocked($('#gate_rem').checked);
+      document.body.classList.remove('gate-lock');
+      d.remove();
+      const c=$('#gate11css');if(c)c.remove();
+      if($('#msg'))$('#msg').innerHTML='🔓 ورود موفق';
+    }catch(e){err.textContent='خطا در بررسی رمز'}
+  };
+  $('#gate_go').onclick=tryLogin;
+  pw.addEventListener('keydown',e=>{if(e.key==='Enter')tryLogin()});
+  setTimeout(()=>pw.focus(),200);
+}
+
+function changePassDlg(){
+  const o=document.createElement('div');
+  o.style.cssText='position:fixed;inset:0;background:#000a;z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;direction:rtl;font-family:Vazirmatn,Tahoma,sans-serif';
+  o.innerHTML=`<div style="width:min(400px,100%);background:var(--sf,#1e2836);color:var(--tx,#e8eef6);border-radius:14px;padding:18px;border:1px solid rgba(255,255,255,.1)">
+    <b>تغییر رمز ورود</b>
+    <div style="margin-top:12px;display:flex;flex-direction:column;gap:10px">
+      <label style="font-size:12px">رمز فعلی<input type="password" id="cp_old" style="width:100%;padding:10px;border-radius:8px;border:1px solid #444;background:#111;color:inherit;box-sizing:border-box"></label>
+      <label style="font-size:12px">رمز جدید<input type="password" id="cp_new" style="width:100%;padding:10px;border-radius:8px;border:1px solid #444;background:#111;color:inherit;box-sizing:border-box"></label>
+      <label style="font-size:12px">تکرار رمز جدید<input type="password" id="cp_new2" style="width:100%;padding:10px;border-radius:8px;border:1px solid #444;background:#111;color:inherit;box-sizing:border-box"></label>
+    </div>
+    <div id="cp_err" style="color:#f85149;font-size:13px;min-height:18px;margin-top:8px"></div>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button type="button" id="cp_ok" style="padding:8px 16px;border-radius:8px;border:0;background:#1f6feb;color:#fff;font:inherit;cursor:pointer">ذخیره</button>
+      <button type="button" id="cp_x" style="padding:8px 16px;border-radius:8px;border:1px solid #555;background:transparent;color:inherit;font:inherit;cursor:pointer">انصراف</button>
+      <button type="button" id="cp_lock" style="padding:8px 16px;border-radius:8px;border:1px solid #555;background:transparent;color:inherit;font:inherit;cursor:pointer;margin-right:auto">🔒 قفل کردن الان</button>
+    </div>
+  </div>`;
+  document.body.appendChild(o);
+  o.querySelector('#cp_x').onclick=()=>o.remove();
+  o.querySelector('#cp_lock').onclick=()=>lockNow();
+  o.querySelector('#cp_ok').onclick=async()=>{
+    const err=o.querySelector('#cp_err');
+    const old=o.querySelector('#cp_old').value;
+    const n1=o.querySelector('#cp_new').value;
+    const n2=o.querySelector('#cp_new2').value;
+    if(!n1||n1.length<4){err.textContent='رمز جدید حداقل ۴ کاراکتر';return}
+    if(n1!==n2){err.textContent='تکرار رمز یکسان نیست';return}
+    const oh=await sha256(old);
+    if(oh!==getStoredHash()){err.textContent='رمز فعلی اشتباه است';return}
+    const nh=await sha256(n1);
+    try{localStorage.setItem(GATE_HASH_KEY,nh)}catch(e){}
+    o.remove();
+    if($('#msg'))$('#msg').innerHTML='✅ رمز ورود تغییر کرد. روی دستگاه‌های دیگر هم همین رمز را بگذارید یا دوباره تنظیم کنید.';
+  };
+}
+window.changePassDlg=changePassDlg;
+window.lockApp=lockNow;
+
+/* دکمه در نوار */
+function addPassBtn(){
+  const tb=document.querySelector('#hd .tb')||document.querySelector('.tb');
+  if(tb&&!document.getElementById('btnPass11')){
+    tb.insertAdjacentHTML('beforeend',
+      '<button class="o" id="btnPass11" onclick="changePassDlg()" title="رمز ورود">🔑 رمز</button>'+
+      '<button class="o" onclick="lockApp()" title="قفل">🔒</button>');
+  }
+}
+
+/* اجرا */
+if(!isUnlocked()){
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',showGate);
+  else showGate();
+}else{
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',addPassBtn);
+  else addPassBtn();
+}
+/* بعد از لود کامل هم دکمه را اضافه کن */
+setTimeout(addPassBtn,800);
+})();
+</script>
+
 </body></html>
